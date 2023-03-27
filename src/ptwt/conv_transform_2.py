@@ -220,11 +220,14 @@ def waverec2(
                 kernel_size=(rec_filt.shape[2], rec_filt.shape[3]),
                 stride=2,
                 bias=False,
+                device=res_ll.device
             )
             complex_conv_tr_layer.conv_tran_r.weight.requires_grad = False
             complex_conv_tr_layer.conv_tran_i.weight.requires_grad = False
-            _ = complex_conv_tr_layer.conv_tran_r.weight.copy_(rec_filt.real)
-            _ = complex_conv_tr_layer.conv_tran_i.weight.copy_(rec_filt.imag)
+            real_rec_filt = rec_filt.real.to(res_ll.device)
+            imag_rec_filt = rec_filt.imag.to(res_ll.device)
+            _ = complex_conv_tr_layer.conv_tran_r.weight.copy_(real_rec_filt)
+            _ = complex_conv_tr_layer.conv_tran_i.weight.copy_(imag_rec_filt)
             res_ll = complex_conv_tr_layer(res_ll)
         
         else:
