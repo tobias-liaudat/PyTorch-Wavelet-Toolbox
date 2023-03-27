@@ -8,7 +8,8 @@ import torch
 
 from ._util import Wavelet, _as_wavelet, _outer
 from .conv_transform import _get_pad, _translate_boundary_strings, get_filter_tensors
-
+from complexPyTorch.complexLayers import ComplexConv2d
+from complexPyTorch.complexLayers import ComplexConvTranspose2d
 
 def construct_2d_filt(lo: torch.Tensor, hi: torch.Tensor) -> torch.Tensor:
     """Construct two dimensional filters using outer products.
@@ -127,7 +128,37 @@ def wavedec2(
     res_ll = data
     for _ in range(level):
         res_ll = fwt_pad2(res_ll, wavelet, mode=mode)
+        # conv2d supports complex convolution
         res = torch.nn.functional.conv2d(res_ll, dec_filt, stride=2)
+
+        # if torch.is_complex(res_ll):
+        #     complex_conv_layer = ComplexConv2d(
+        #         in_channels=res_ll.shape[1],
+        #         out_channels=dec_filt.shape[0],
+        #         kernel_size=(dec_filt.shape[2], dec_filt.shape[3]),
+        #         stride=2,
+        #         bias=False
+        #     )
+        #     complex_conv_layer.conv_r.weight.requires_grad = False
+        #     complex_conv_layer.conv_i.weight.requires_grad = False
+        #     _ = complex_conv_layer.conv_r.weight.copy_(dec_filt.real)
+        #     _ = complex_conv_layer.conv_i.weight.copy_(dec_filt.real)
+        #     res = complex_conv_layer(res_ll)
+        # else:
+        #     # Functional API
+        #     res = torch.nn.functional.conv2d(res_ll, dec_filt, stride=2)
+        #     # # Module API
+        #     # conv_layer = torch.nn.Conv2d(
+        #     #     in_channels=res_ll.shape[1],
+        #     #     out_channels=dec_filt.shape[0],
+        #     #     kernel_size=(dec_filt.shape[2], dec_filt.shape[3]),
+        #     #     stride=2,
+        #     #     bias=False
+        #     # )
+        #     # conv_layer.weight.requires_grad = False
+        #     # _ = conv_layer.weight.copy_(dec_filt)
+        #     # res = conv_layer(res_ll)
+
         res_ll, res_lh, res_hl, res_hh = torch.split(res, 1, 1)
         result_lst.append((res_lh, res_hl, res_hh))
     result_lst.append(res_ll)
@@ -181,7 +212,35 @@ def waverec2(
         res_ll = torch.cat(
             [res_ll, res_lh_hl_hh[0], res_lh_hl_hh[1], res_lh_hl_hh[2]], 1
         )
-        res_ll = torch.nn.functional.conv_transpose2d(res_ll, rec_filt, stride=2)
+
+        if torch.is_complex(res_ll):
+            complex_conv_tr_layer = ComplexConvTranspose2d(
+                in_channels=res_ll.shape[1],
+                out_channels=rec_filt.shape[1],
+                kernel_size=(rec_filt.shape[2], rec_filt.shape[3]),
+                stride=2,
+                bias=False,
+            )
+            complex_conv_tr_layer.conv_tran_r.weight.requires_grad = False
+            complex_conv_tr_layer.conv_tran_i.weight.requires_grad = False
+            _ = complex_conv_tr_layer.conv_tran_r.weight.copy_(rec_filt.real)
+            _ = complex_conv_tr_layer.conv_tran_i.weight.copy_(rec_filt.imag)
+            res_ll = complex_conv_tr_layer(res_ll)
+        
+        else:
+            # Functional API
+            res_ll = torch.nn.functional.conv_transpose2d(res_ll, rec_filt, stride=2)
+            # # Moduler API
+            # conv_tr_layer = torch.nn.ConvTranspose2d(
+            #     in_channels=res_ll.shape[1],
+            #     out_channels=rec_filt.shape[1],
+            #     kernel_size=(rec_filt.shape[2], rec_filt.shape[3]),
+            #     stride=2,
+            #     bias=False,
+            # )
+            # conv_tr_layer.weight.requires_grad = False
+            # _ = conv_tr_layer.weight.copy_(rec_filt)
+            # res_ll = conv_tr_layer(res_ll)
 
         # remove the padding
         padl = (2 * filt_len - 3) // 2
